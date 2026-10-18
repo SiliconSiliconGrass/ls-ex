@@ -1,0 +1,17 @@
+[project]
+name = "ls-ex"
+version = "0.1.0"
+description = "生成与解析 LS-DYNA .k 关键字文件的小工具（含空心长方体/长方体壳网格生成）"
+readme = "README.md"
+authors = [
+    { name = "SiliconSiliconGrass", email = "indexguo@163.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+ls-ex = "ls_ex:main"
+
+[build-system]
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"

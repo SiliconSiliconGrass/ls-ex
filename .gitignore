@@ -1,0 +1,35 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# LS-DYNA keyword decks: generated output, keep only the test fixture
+*.k
+!test1.k
+
+# LS-DYNA run directory and solver artifacts
+sim/
+d3plot*
+d3dump*
+d3hsp*
+binout
+messag
+status.out
+lsrun.out.txt
+run.out.txt
+alevfrc.inc
+salevfrc*
+*.lsda
+slefsi
+group_file
+adptmp
+part_des
+
+# LS-PrePost scratch / session files
+lspost.*
