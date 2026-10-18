@@ -59,6 +59,48 @@ uv run ls-ex --kind shell --inner 20,10,10 --thickness 2 -e 2 -o outputs/hollow_
 壳单元版本（`--kind shell`）把网格画在壁厚的**中面**上，中面尺寸 = `inner_size + thickness`，
 再通过 `*SECTION_SHELL` 的 `T1..T4` 给出壁厚。单元法向统一朝外。
 
+## 椭圆台体壳（纯六面体）
+
+```powershell
+uv run ls-ex --kind elliptic-frustum `
+    --major-axis 40 --minor-axis 30 --height 50 --taper 0.6 `
+    --thickness 3 --element-size 2
+# -> outputs/elliptic_frustum.k
+```
+
+参数：
+
+| 参数 | 含义 |
+| --- | --- |
+| `--major-axis` / `--minor-axis` | 大端面椭圆的长轴 / 短轴（全长，不是半轴） |
+| `--height` | 内腔椭圆台体高度 H |
+| `--taper` | 小端面相对大端面的位似比 k |
+| `--thickness` | 壳厚 h（侧壁和端盖相同） |
+| `--element-size` | 目标单元尺寸，缺省 2 |
+
+几何约定（重要）：
+
+```
+内腔：z=0 处椭圆 (a0,b0)，z=H 处椭圆 (k*a0,k*b0)，中间线性过渡
+外轮廓：每个截面上内椭圆的等距曲线（法向偏移 h），不是 (a+h,b+h) 缩放椭圆
+端盖：z∈[-h,0] 与 z∈[H,H+h]，截面是外等距曲线围成的实心区域，厚度 h
+侧壁：z∈[0,H]，内椭圆与外等距曲线之间的环形区域
+总高度 = H + 2h
+```
+
+网格采用"分区扫掠"：
+
+- 侧壁：环向 × 径向 × 轴向的结构化扫掠；
+- 端盖：外环（内椭圆 → 外等距曲线）沿用侧壁节点，内部椭圆盘用中心矩形 +
+  四个 Coons 过渡块（蝶形分块），再沿轴向扫掠；
+- 环向节点按象限弧长均匀分布，环向单元数由"中截面外轮廓"估算，让大端略粗、
+  小端略细，尺寸整体围绕 `element-size` 分布（台体缩到 k 倍，环向尺寸也会按
+  截面缩放；k=0.6 时大约 0.6~1.2 倍目标值）。
+
+限制：等距曲线在椭圆长轴顶点的曲率半径为 `b²/a`，当壳厚接近该值（尤其在小端）
+曲线会自交，程序会直接报错提示。示例（40×30、k=0.6、h=3）共约 4.4k 个六面体，
+网格体积与解析值（Steiner 公式）误差 < 0.3%。
+
 ## 生成的文件里有什么
 
 ```
@@ -128,9 +170,11 @@ src/ls_ex/
     KWord.py            一个 *XXX 关键字块
     KeywordFile.py      整个 .k 的读写 + 节点/单元/part 提取
     KeywordGenerator.py 长方体 / 空心长方体 / 壳单元网格生成
+    EllipticFrustum.py  椭圆台体壳（纯六面体）网格生成
     cli.py              命令行入口（ls-ex）
 examples/
     generate_hollow_box.py  示例脚本
+    generate_elliptic_frustum.py  椭圆台体壳示例
 tests/                  单元测试（网格体积、封闭性、法向、读写往返）
 outputs/                所有生成的 .k 文件（已 gitignore，只保留 .gitkeep）
 test1.k                 原始示例文件（测试用的输入，保留在 git 里）

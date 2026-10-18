@@ -29,6 +29,11 @@ from .KeywordGenerator import (
     hollow_box_mesh,
     hollow_box_shell_mesh,
 )
+from .EllipticFrustum import (
+    analytic_shell_volume,
+    ellipse_perimeter,
+    elliptical_frustum_shell_mesh,
+)
 from .cli import main
 
 __version__ = "0.1.0"
@@ -38,9 +43,12 @@ __all__ = [
     "KWord",
     "KeywordFile",
     "Mesh",
+    "analytic_shell_volume",
     "as_vec3",
     "box_mesh",
     "build_keyword_file",
+    "ellipse_perimeter",
+    "elliptical_frustum_shell_mesh",
     "format_float",
     "format_int",
     "format_str",
