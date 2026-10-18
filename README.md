@@ -101,6 +101,25 @@ uv run ls-ex --kind elliptic-frustum `
 曲线会自交，程序会直接报错提示。示例（40×30、k=0.6、h=3）共约 4.4k 个六面体，
 网格体积与解析值（Steiner 公式）误差 < 0.3%。
 
+### 椭圆台体壳 + S-ALE 爆炸（侵蚀破片，无 SPH）
+
+```powershell
+.venv\Scripts\python.exe examples\build_elliptic_frustum_blast.py `
+    --major-semi 43.2 --minor-semi 36 --height 100 --thickness 8 `
+    --cone-angle 86.6 --element-size 2 --endtim 0.15 --fill cavity
+# -> outputs/elliptic_frustum_blast_cavity.k
+```
+
+- `--cone-angle` 按**侧壁与端面夹角**换算小端位似比：`k = 1 - H/(a0*tan(θ))`。
+- `--fill cavity`（默认）：用 `*INITIAL_VOLUME_FRACTION_NALEGP` 逐单元给出 air/TNT
+  体积分数，TNT **精确填满椭圆内腔**（部分单元 5×5×5 采样）。文件较大（2mm 时约 32 MB）。
+- `--fill cylinder`：腔内柱形装药（`GEOM=CYLINDER`，更快、文件小）。
+- 空气域 = 结构外轮廓每侧再加 `--air-margin`（默认 40 mm）；2mm 网格约 75 万 S-ALE 单元。
+- 壳体：`MAT_PLASTIC_KINEMATIC`（FS=0.2 失效应变）+ `*CONTACT_ERODING_SINGLE_SURFACE`
+  （`erosop=1, iadj=1`）；`*ALE_STRUCTURED_FSI` 耦合壳体；起爆点 (0,0,10)。
+- 单位制 mm-g-ms（应力 MPa）：空气 `MAT_NULL`+多项式 EOS；TNT `MAT_HIGH_EXPLOSIVE_BURN`+JWL
+  （A=371200, B=3231, E0=7000, PCJ=21000, D=6930）。
+
 ## 生成的文件里有什么
 
 ```

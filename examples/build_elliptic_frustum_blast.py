@@ -16,9 +16,9 @@
 几何约定与 ``elliptical_frustum_shell_mesh`` 一致：给定的椭圆/高度/位似比是**内腔**；
 外轮廓是每个截面的椭圆等距曲线；两端各有厚 d 的实心端盖；总高 = H + 2d。
 
-炸药填充：椭圆台体空腔没有现成的 S-ALE 填充几何，这里在腔内放一个
-半径 30 mm、高 H mm 的**柱形装药**（``GEOM=CYLINDER``，轴线从 z=0 到 z=H），
-完全位于内腔内部。空腔容积约 424 cm³，柱形装药约 283 cm³（约 67%），四周留有小间隙。
+炸药填充：默认 ``--fill cavity``，用 ``*INITIAL_VOLUME_FRACTION_NALEGP``
+**逐单元**给出 air/TNT 体积分数，把 TNT 精确填满椭圆台体空腔（部分单元按
+5×5×5 采样计算分数）。``--fill cylinder`` 则退回到腔内柱形装药（更快，无需大块数据）。
 
 单位制：mm-g-ms（应力单位 MPa），与之前修正后的材料数据一致。
 """
@@ -57,11 +57,67 @@ def taper_ratio(a0: float, height: float, cone_angle_deg: float) -> float:
     return ratio
 
 
+def cavity_fractions(a0: float, b0: float, height: float, ratio: float,
+                     bounds: tuple[float, float, float, float, float, float],
+                     counts: tuple[int, int, int], base_eid: int) -> list[tuple[int, float]]:
+    """每个 S-ALE 单元的 (eid, TNT 体积分数)；其余为 air=1-vf (Steiner 空腔)。"""
+    x_min, x_max, y_min, y_max, z_min, z_max = bounds
+    nx, ny, nz = counts
+    dx = (x_max - x_min) / nx
+    dy = (y_max - y_min) / ny
+    dz = (z_max - z_min) / nz
+
+    def inside(x: float, y: float, z: float) -> bool:
+        if z < 0.0 or z > height:
+            return False
+        scale = 1.0 + (ratio - 1.0) * z / height
+        return (x / (a0 * scale)) ** 2 + (y / (b0 * scale)) ** 2 <= 1.0
+
+    result: list[tuple[int, float]] = []
+    eid = base_eid
+    for k in range(nz):
+        zc = z_min + (k + 0.5) * dz
+        for j in range(ny):
+            yc = y_min + (j + 0.5) * dy
+            for i in range(nx):
+                xc = x_min + (i + 0.5) * dx
+                # 8 个角点 + 中心
+                flags = []
+                for sx in (-0.5, 0.5):
+                    for sy in (-0.5, 0.5):
+                        for sz in (-0.5, 0.5):
+                            flags.append(inside(xc + sx * dx, yc + sy * dy, zc + sz * dz))
+                center = inside(xc, yc, zc)
+                if all(flags):
+                    fraction = 1.0
+                elif not any(flags) and not center:
+                    fraction = 0.0
+                else:
+                    # 部分填充：5x5x5 子采样
+                    hits = 0
+                    total = 0
+                    for a in range(5):
+                        sx = (a + 0.5) / 5 - 0.5
+                        for b in range(5):
+                            sy = (b + 0.5) / 5 - 0.5
+                            for c in range(5):
+                                sz = (c + 0.5) / 5 - 0.5
+                                total += 1
+                                if inside(xc + sx * dx, yc + sy * dy, zc + sz * dz):
+                                    hits += 1
+                    fraction = hits / total
+                result.append((eid, fraction))
+                eid += 1
+    return result
+
+
 def build_deck(major_semi: float = 43.2, minor_semi: float = 36.0,
                height: float = 100.0, thickness: float = 8.0,
                cone_angle: float = 86.6, element_size: float = 2.0,
                ale_size: float | None = None, endtim: float = 0.2,
-               air_margin: float = 40.0) -> KeywordFile:
+               air_margin: float = 40.0, fill: str = "cavity") -> KeywordFile:
+    if fill not in ("cavity", "cylinder"):
+        raise ValueError("fill 只能是 'cavity' 或 'cylinder'")
     ale_size = ale_size or element_size
     ratio = taper_ratio(major_semi, height, cone_angle)
     mesh = elliptical_frustum_shell_mesh(
@@ -78,8 +134,10 @@ def build_deck(major_semi: float = 43.2, minor_semi: float = 36.0,
         mesh.nodes[nid] = (x, y, z)
         return nid
 
-    axis_node_1 = node_at(0.0, 0.0, 0.0)
-    axis_node_2 = node_at(0.0, 0.0, height)
+    axis_node_1 = axis_node_2 = None
+    if fill == "cylinder":
+        axis_node_1 = node_at(0.0, 0.0, 0.0)
+        axis_node_2 = node_at(0.0, 0.0, height)
     charge_radius = 30.0 if minor_semi > 30.0 else 0.8 * minor_semi
     outer_x = major_semi + thickness + air_margin
     outer_y = minor_semi + thickness + air_margin
@@ -234,22 +292,46 @@ def build_deck(major_semi: float = 43.2, minor_semi: float = 36.0,
         _card("ammg-tnt", 2, 2, "", "", "", "", 0.0,
               kinds=["s", "i", "i", "s", "s", "s", "s", "f"]),
     ]))
-    deck.add(_word("ALE_STRUCTURED_MESH_VOLUME_FILLING", [
-        _header(["mshid", "-", "ammgto", "-", "nsample", "-", "-", "vid"]),
-        _card(1, "", "ammg-air", "", 3, "", "", 0,
-              kinds=["i", "s", "s", "s", "i", "s", "s", "i"]),
-        _header(["geom", "in/out", "e1", "e2", "e3", "e4", "e5"]),
-        _card("ALL", 0, 0.0, 0.0, 0.0, 0.0, 0.0,
-              kinds=["s", "i", "f", "f", "f", "f", "f"]),
-    ]))
-    deck.add(_word("ALE_STRUCTURED_MESH_VOLUME_FILLING", [
-        _header(["mshid", "-", "ammgto", "-", "nsample", "-", "-", "vid"]),
-        _card(1, "", "ammg-tnt", "", 3, "", "", 0,
-              kinds=["i", "s", "s", "s", "i", "s", "s", "i"]),
-        _header(["geom", "in/out", "e1", "e2", "e3", "e4", "e5"]),
-        _card("CYLINDER", 0, axis_node_1, axis_node_2, charge_radius, charge_radius, 0.0,
-              kinds=["s", "i", "i", "i", "f", "f", "f"]),
-    ]))
+    if fill == "cylinder":
+        deck.add(_word("ALE_STRUCTURED_MESH_VOLUME_FILLING", [
+            _header(["mshid", "-", "ammgto", "-", "nsample", "-", "-", "vid"]),
+            _card(1, "", "ammg-air", "", 3, "", "", 0,
+                  kinds=["i", "s", "s", "s", "i", "s", "s", "i"]),
+            _header(["geom", "in/out", "e1", "e2", "e3", "e4", "e5"]),
+            _card("ALL", 0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                  kinds=["s", "i", "f", "f", "f", "f", "f"]),
+        ]))
+        deck.add(_word("ALE_STRUCTURED_MESH_VOLUME_FILLING", [
+            _header(["mshid", "-", "ammgto", "-", "nsample", "-", "-", "vid"]),
+            _card(1, "", "ammg-tnt", "", 3, "", "", 0,
+                  kinds=["i", "s", "s", "s", "i", "s", "s", "i"]),
+            _header(["geom", "in/out", "e1", "e2", "e3", "e4", "e5"]),
+            _card("CYLINDER", 0, axis_node_1, axis_node_2, charge_radius, charge_radius, 0.0,
+                  kinds=["s", "i", "i", "i", "f", "f", "f"]),
+        ]))
+    else:
+        # 逐单元体积分数：TNT 精确填满内腔（air = 1 - TNT）
+        fractions = cavity_fractions(
+            major_semi, minor_semi, height, ratio,
+            (-outer_x, outer_x, -outer_y, outer_y, z_min, z_max),
+            (n_x, n_y, n_z), base_eid=len(mesh.solids) + 1,
+        )
+        fill_block = KWord("INITIAL_VOLUME_FRACTION_NALEGP", [
+            _header(["nalegp"]),
+            _card(2, kinds=["i"]),
+        ])
+
+        def _frac(value: float) -> str:
+            if value >= 1.0:
+                return "         1"
+            if value <= 0.0:
+                return "         0"
+            return f"{value:>10.5f}"
+
+        for eid, tnt_fraction in fractions:
+            air_fraction = 1.0 - tnt_fraction
+            fill_block.add(KCard(line=f"{eid:>10}{_frac(air_fraction)}{_frac(tnt_fraction)}"))
+        deck.add(fill_block)
     deck.add(_word("SET_MULTI_MATERIAL_GROUP_TITLE", [
         _card("setmmg-tnt", widths=[80], kinds=["s"]),
         _header(["ammsid"]),
@@ -302,7 +384,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="S-ALE 单元尺寸（缺省与结构网格相同）")
     parser.add_argument("--endtim", type=float, default=0.2)
     parser.add_argument("--air-margin", type=float, default=40.0)
-    parser.add_argument("-o", "--output", default="outputs/elliptic_frustum_blast.k")
+    parser.add_argument("--fill", choices=("cavity", "cylinder"), default="cavity",
+                        help="cavity=逐单元体积分数精确充满内腔；cylinder=腔内柱形装药")
+    parser.add_argument("-o", "--output", default=None)
     args = parser.parse_args(argv)
 
     deck = build_deck(
@@ -310,8 +394,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         height=args.height, thickness=args.thickness,
         cone_angle=args.cone_angle, element_size=args.element_size,
         ale_size=args.ale_size, endtim=args.endtim, air_margin=args.air_margin,
+        fill=args.fill,
     )
-    path = Path(args.output)
+    path = Path(args.output or f"outputs/elliptic_frustum_blast_{args.fill}.k")
     path.parent.mkdir(parents=True, exist_ok=True)
     deck.write(path)
 
