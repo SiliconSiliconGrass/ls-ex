@@ -130,6 +130,44 @@ class EllipticFrustumTest(unittest.TestCase):
         self.assertGreater(min(xs), 75)
         self.assertAlmostEqual(min(zs), 7 - THICK, places=9)
 
+    def test_symmetry_sectors_have_exact_volume_fractions(self) -> None:
+        exact = analytic_shell_volume(MAJOR, MINOR, HEIGHT, RATIO, THICK)
+        cases = {
+            "half-long": 0.5,
+            "half-short": 0.5,
+            "quarter": 0.25,
+        }
+        for symmetry, fraction in cases.items():
+            with self.subTest(symmetry=symmetry):
+                mesh = elliptical_frustum_shell_mesh(
+                    MAJOR, MINOR, HEIGHT, RATIO, THICK,
+                    element_size=ELEMENT, symmetry=symmetry,
+                )
+                self.assertAlmostEqual(mesh.solid_volume, exact * fraction,
+                                       delta=exact * 0.002)
+                xs = [p[0] for p in mesh.nodes.values()]
+                ys = [p[1] for p in mesh.nodes.values()]
+                if symmetry in {"half-short", "quarter"}:
+                    self.assertGreaterEqual(min(xs), -1e-9)
+                    self.assertTrue(any(abs(x) < 1e-9 for x in xs))
+                if symmetry in {"half-long", "quarter"}:
+                    self.assertGreaterEqual(min(ys), -1e-9)
+                    self.assertTrue(any(abs(y) < 1e-9 for y in ys))
+                for _, _, corners in mesh.solids:
+                    center_x = sum(mesh.nodes[nid][0] for nid in corners) / 8
+                    center_y = sum(mesh.nodes[nid][1] for nid in corners) / 8
+                    if symmetry in {"half-short", "quarter"}:
+                        self.assertGreater(center_x, 0.0)
+                    if symmetry in {"half-long", "quarter"}:
+                        self.assertGreater(center_y, 0.0)
+
+    def test_unknown_symmetry_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            elliptical_frustum_shell_mesh(
+                MAJOR, MINOR, HEIGHT, RATIO, THICK,
+                element_size=ELEMENT, symmetry="eighth",
+            )
+
     def test_offset_curve_limit_is_checked(self) -> None:
         # 非常扁的椭圆 + 厚壁：等距曲线会自交
         with self.assertRaises(ValueError):

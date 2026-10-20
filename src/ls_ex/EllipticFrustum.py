@@ -103,6 +103,45 @@ def _lerp(p: Sequence[float], q: Sequence[float], t: float) -> tuple[float, floa
     return (p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t)
 
 
+def _keep_symmetry_sector(x: float, y: float, symmetry: str) -> bool:
+    """Return whether an element centroid belongs to the requested symmetry sector."""
+    if symmetry == "full":
+        return True
+    if symmetry == "half-long":
+        # A cut along the major (x) axis lies in the x-z plane and keeps y >= 0.
+        return y > 0.0
+    if symmetry == "half-short":
+        # A cut along the minor (y) axis lies in the y-z plane and keeps x >= 0.
+        return x > 0.0
+    if symmetry == "quarter":
+        return x > 0.0 and y > 0.0
+    raise ValueError(f"unknown symmetry model: {symmetry!r}")
+
+
+def _truncate_symmetry(builder: "_Builder", symmetry: str) -> None:
+    """Discard complementary elements and compact the remaining node IDs."""
+    if symmetry == "full":
+        return
+
+    kept_solids = []
+    used_nodes = set()
+    for _, pid, corners in builder.solids:
+        center_x = sum(builder.nodes[nid][0] for nid in corners) / len(corners)
+        center_y = sum(builder.nodes[nid][1] for nid in corners) / len(corners)
+        if _keep_symmetry_sector(center_x, center_y, symmetry):
+            kept_solids.append((pid, corners))
+            used_nodes.update(corners)
+
+    remap = {old_nid: new_nid for new_nid, old_nid in enumerate(sorted(used_nodes), 1)}
+    builder.nodes = {remap[old_nid]: builder.nodes[old_nid] for old_nid in sorted(used_nodes)}
+    builder.ids = {(round(x, 9), round(y, 9), round(z, 9)): nid
+                   for nid, (x, y, z) in builder.nodes.items()}
+    builder.solids = [
+        (new_eid, pid, tuple(remap[nid] for nid in corners))
+        for new_eid, (pid, corners) in enumerate(kept_solids, 1)
+    ]
+
+
 def _coons_block(inner: Sequence[tuple[float, float]],
                  outer: Sequence[tuple[float, float]],
                  radial_cells: int) -> list[list[tuple[float, float]]]:
@@ -233,6 +272,7 @@ def elliptical_frustum_shell_mesh(
     element_size: float = 2.0,
     origin: object = (0.0, 0.0, 0.0),
     pid: int = 1,
+    symmetry: str = "full",
 ) -> Mesh:
     """生成椭圆台体壳的纯六面体网格。
 
@@ -256,6 +296,8 @@ def elliptical_frustum_shell_mesh(
     thickness = _positive(thickness, "thickness")
     element_size = _positive(element_size, "element_size")
     shift = as_vec3(origin, "origin")
+    if symmetry not in {"full", "half-long", "half-short", "quarter"}:
+        raise ValueError("symmetry must be full, half-long, half-short, or quarter")
 
     a0, b0 = major_axis / 2, minor_axis / 2
     a1, b1 = a0 * small_ratio, b0 * small_ratio
@@ -279,6 +321,10 @@ def elliptical_frustum_shell_mesh(
     a_mid, b_mid = (a0 + a1) / 2, (b0 + b1) / 2
     m_right = quadrant_cells(a_mid, b_mid, -pi / 4, pi / 4)
     m_top = quadrant_cells(a_mid, b_mid, pi / 4, 3 * pi / 4)
+    if symmetry != "full":
+        # Keep x=0 and y=0 on mesh faces so the symmetry cuts have no jagged edges.
+        m_right = max(2, 2 * round(m_right / 2))
+        m_top = max(2, 2 * round(m_top / 2))
     right_angles = _quadrant_angles(a0, b0, -pi / 4, pi / 4, m_right)
     top_angles = _quadrant_angles(a0, b0, pi / 4, 3 * pi / 4, m_top)
     left_angles = _quadrant_angles(a0, b0, 3 * pi / 4, 5 * pi / 4, m_right)
@@ -320,11 +366,14 @@ def elliptical_frustum_shell_mesh(
             builder.sweep([block] * len(z_cap), z_cap, pid)
 
     # 平移到 origin
+    _truncate_symmetry(builder, symmetry)
+
     if shift != (0.0, 0.0, 0.0):
         builder.nodes = {nid: (x + shift[0], y + shift[1], z + shift[2])
                          for nid, (x, y, z) in builder.nodes.items()}
 
     mesh = Mesh(nodes=builder.nodes, solids=builder.solids, pid=pid,
                 description=(f"elliptic frustum shell major={major_axis} minor={minor_axis} "
-                             f"H={height} k={small_ratio} t={thickness} h={element_size}"))
+                             f"H={height} k={small_ratio} t={thickness} h={element_size} "
+                             f"symmetry={symmetry}"))
     return mesh
