@@ -34,6 +34,19 @@ from .EllipticFrustum import (
     ellipse_perimeter,
     elliptical_frustum_shell_mesh,
 )
+from .Voxelization import (
+    SurfaceMesh,
+    VoxelGeometry,
+    VoxelRegion,
+    air_ale_voxel_count,
+    build_general_ale_blast_deck,
+    build_geometry_keyword_file,
+    load_glb,
+    load_stl,
+    load_surface_mesh,
+    surface_is_watertight,
+    voxelize_surface,
+)
 from .cli import main
 
 __version__ = "0.1.0"
@@ -43,9 +56,15 @@ __all__ = [
     "KWord",
     "KeywordFile",
     "Mesh",
+    "SurfaceMesh",
+    "VoxelGeometry",
+    "VoxelRegion",
     "analytic_shell_volume",
+    "air_ale_voxel_count",
     "as_vec3",
     "box_mesh",
+    "build_general_ale_blast_deck",
+    "build_geometry_keyword_file",
     "build_keyword_file",
     "ellipse_perimeter",
     "elliptical_frustum_shell_mesh",
@@ -55,7 +74,12 @@ __all__ = [
     "hex_volume",
     "hollow_box_mesh",
     "hollow_box_shell_mesh",
+    "load_glb",
+    "load_stl",
+    "load_surface_mesh",
     "main",
     "parse_numbers",
+    "surface_is_watertight",
     "typed_card",
+    "voxelize_surface",
 ]
