@@ -7,10 +7,15 @@ authors = [
     { name = "SiliconSiliconGrass", email = "indexguo@163.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "lasso-python>=2.0.4",
+    "numpy>=2.0",
+    "plotly>=5.24",
+]
 
 [project.scripts]
 ls-ex = "ls_ex:main"
+ls-ex-sph = "ls_ex.sph_fragments:main"
 
 [build-system]
 requires = ["uv_build>=0.12.15,<0.13.0"]

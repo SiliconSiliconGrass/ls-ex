@@ -1,5 +1,67 @@
 # ls-ex
 
+## d3plot SPH 破片分析
+
+```powershell
+uv run ls-ex-sph D:\path\to\run\d3plot `
+    --output-dir outputs\sph-fragments `
+    --state -1 --axis 0,0,1 `
+    --angle-mode velocity --angle-bin-size 10 `
+    --outlier-method tukey --iqr-factor 3 `
+    --speed-unit mm/ms --length-unit mm
+```
+
+输出包括：
+
+- `sph_speed_animation.html`：带 Play/Pause 和拖动时间轴的动态 3D 粒子图，
+  所有时间帧共用同一速度色标。
+- `sph_speed_3d.html`：最后一个状态的按速度着色交互式 3D 粒子图。
+- `sph_particle_sequence.npz`：动画中固定粒子子集的位置、速度和存活状态时间序列。
+- `angular_distribution.html`：极角分箱的粒子数量、速度均值/分位数和二维分布。
+- `sph_particles.csv` / `.npz`：全部 SPH 粒子的位置、速度和过滤标记。
+- `sph_particles_filtered.csv` / `.npz`：实际用于统计和可视化的粒子。
+- `angular_statistics.csv`：每个角度箱的数量、占比和速度统计。
+- `angular_speed_histogram.csv`：角度 × 速度的二维计数。
+- `summary.json`：状态、时间、过滤阈值、样本数量和输出索引。
+
+位置按 `node_coordinates + node_displacement` 重建，速度读取
+`node_velocity`，粒子编号通过 `sph_node_indexes` 映射。默认角度是速度方向
+相对 `+Z` 轴的极角：0° 为沿 `+Z`，180° 为沿 `-Z`。可以用 `--axis`
+和 `--angle-mode position --origin x,y,z` 修改定义。
+
+默认 `tukey` 过滤以 Q3 + 3×IQR 截除速度上尾异常值，并始终排除
+非有限值和 `sph_deletion != 0` 的粒子。若已知模型单位下的速度上限，
+建议显式使用 `--speed-max`；也可以改用 `--outlier-method mad` 或
+`--outlier-method percentile --speed-percentile 99`。
+
+动画默认抽取 60 个状态和 3000 个粒子，可用
+`--max-animation-frames`、`--max-animation-points` 调整。提高粒子数会让
+HTML 明显变大；`--no-animate` 可关闭动画生成。
+
+在 Python 中调用：
+
+```python
+from ls_ex import (
+    analyze_sph_fragments,
+    load_sph_particle_data,
+    load_sph_particle_sequence,
+)
+
+particles = load_sph_particle_data("path/to/d3plot", state=-1)
+sequence = load_sph_particle_sequence(
+    "path/to/d3plot",
+    max_frames=60,
+    particle_indices=particles.particle_indices[:3000],
+)
+report = analyze_sph_fragments(
+    "path/to/d3plot",
+    "outputs/sph-fragments",
+    axis=(0.0, 0.0, 1.0),
+    angle_bin_size_deg=10.0,
+    outlier_method="tukey",
+)
+```
+
 读写 LS-DYNA `.k`（keyword）文件的小工具，外加两个网格生成器：实心长方体和**空心长方体（长方体壳）**。
 
 ## 快速开始
