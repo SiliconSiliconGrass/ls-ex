@@ -1,0 +1,59 @@
+{
+  "d3plot": "D:\\MyStuff\\Research\\elliptical-warhead\\New\\elliptical-half-sph\\mmp-general-ale-corrected-deton\\d3plot",
+  "state": -1,
+  "time": 0.20000596960330436,
+  "axis": [
+    0.0,
+    0.0,
+    1.0
+  ],
+  "origin": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "angle_mode": "velocity",
+  "angle_bin_size_deg": 10.0,
+  "speed_unit": "mm/ms",
+  "length_unit": "mm",
+  "sph_particle_count": 26456,
+  "filtered_particle_count": 22780,
+  "valid_angle_count": 22780,
+  "invalid_angle_count": 0,
+  "filter": {
+    "method": "tukey",
+    "upper_speed": 6561.33041635813,
+    "lower_speed": null,
+    "input_count": 26456,
+    "alive_count": 26456,
+    "finite_count": 26456,
+    "output_count": 22780,
+    "excluded_count": 3676,
+    "excluded_speed_min": 6562.977512434347,
+    "excluded_speed_max": 3129113449.08652
+  },
+  "filtered_speed_statistics": {
+    "count": 22780,
+    "min": 36.28422997528088,
+    "mean": 1512.029574054108,
+    "std": 1063.8169806907288,
+    "p05": 852.3619519349959,
+    "median": 1087.4487800704742,
+    "p95": 4133.322318450776,
+    "max": 6559.960233470198
+  },
+  "outputs": {
+    "all_particles_csv": "outputs\\sph-fragment-analysis-elliptical-half-sph\\sph_particles.csv",
+    "all_particles_npz": "outputs\\sph-fragment-analysis-elliptical-half-sph\\sph_particles.npz",
+    "filtered_particles_csv": "outputs\\sph-fragment-analysis-elliptical-half-sph\\sph_particles_filtered.csv",
+    "filtered_particles_npz": "outputs\\sph-fragment-analysis-elliptical-half-sph\\sph_particles_filtered.npz",
+    "angular_statistics_csv": "outputs\\sph-fragment-analysis-elliptical-half-sph\\angular_statistics.csv",
+    "angular_speed_histogram_csv": "outputs\\sph-fragment-analysis-elliptical-half-sph\\angular_speed_histogram.csv",
+    "speed_3d_html": "outputs\\sph-fragment-analysis-elliptical-half-sph\\sph_speed_3d.html",
+    "angular_distribution_html": "outputs\\sph-fragment-analysis-elliptical-half-sph\\angular_distribution.html",
+    "animation_html": "outputs\\sph-fragment-analysis-elliptical-half-sph\\sph_speed_animation.html",
+    "animation_sequence_npz": "outputs\\sph-fragment-analysis-elliptical-half-sph\\sph_particle_sequence.npz",
+    "animation_frame_count": 102,
+    "animation_particle_count": 3000
+  }
+}
