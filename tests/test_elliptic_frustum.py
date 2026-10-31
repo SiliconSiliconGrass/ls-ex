@@ -6,7 +6,7 @@ import unittest
 from collections import Counter, defaultdict
 from math import sqrt
 
-from ls_ex import KeywordFile, build_keyword_file, hex_volume
+from ls_ex import KeywordFile, assess_hex_mesh_quality, build_keyword_file, hex_volume
 from ls_ex.EllipticFrustum import (analytic_shell_volume, ellipse_perimeter,
                                    elliptical_frustum_shell_mesh)
 
@@ -121,6 +121,16 @@ class EllipticFrustumTest(unittest.TestCase):
         # 台体整体缩放到 0.6，环向尺寸本身就会在小端变细；中位数应接近目标值
         self.assertAlmostEqual(median, ELEMENT, delta=0.35)
         self.assertGreater(lengths[0], 0.3 * ELEMENT)
+
+    def test_quality_distributions_are_bounded(self) -> None:
+        report = assess_hex_mesh_quality(self.mesh, target_size=ELEMENT)
+
+        self.assertEqual(report.negative_volume_count, 0)
+        self.assertEqual(report.degenerate_volume_count, 0)
+        self.assertGreater(report.scaled_jacobian.minimum, 0.5)
+        self.assertLess(report.skewness.p95, 0.3)
+        self.assertLess(report.characteristic_size.p95_p5_ratio, 2.1)
+        self.assertLess(report.aspect_ratio.p95, 2.2)
 
     def test_origin_is_applied(self) -> None:
         mesh = elliptical_frustum_shell_mesh(MAJOR, MINOR, HEIGHT, RATIO, THICK,

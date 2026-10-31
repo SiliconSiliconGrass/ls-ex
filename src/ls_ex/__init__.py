@@ -39,6 +39,12 @@ from .EllipticFrustum import (
     ellipse_perimeter,
     elliptical_frustum_shell_mesh,
 )
+from .MeshQuality import (
+    DistributionSummary,
+    HexMeshQualityReport,
+    MeshQualityThresholds,
+    assess_hex_mesh_quality,
+)
 from .Voxelization import (
     SurfaceMesh,
     VoxelGeometry,
@@ -80,6 +86,9 @@ __all__ = [
     "KeywordFile",
     "GEOMETRY_KEYWORDS",
     "Mesh",
+    "DistributionSummary",
+    "HexMeshQualityReport",
+    "MeshQualityThresholds",
     "AngularSpeedHistogram",
     "AngularStatistics",
     "OutlierFilterReport",
@@ -94,6 +103,7 @@ __all__ = [
     "angular_statistics",
     "air_ale_voxel_count",
     "as_vec3",
+    "assess_hex_mesh_quality",
     "box_mesh",
     "build_general_ale_blast_deck",
     "build_geometry_keyword_file",
