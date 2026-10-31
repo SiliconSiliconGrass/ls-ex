@@ -1,5 +1,30 @@
 # ls-ex
 
+## 论文椭圆战斗部导出
+
+`tools/generate_paper_elliptic_blast.py` 以现有 2 mm、General ALE 基线导出
+8 个入口文件：
+
+```text
+paper_sph_{full,half-long,half-short,quarter}.k
+paper_no-sph_{full,half-long,half-short,quarter}.k
+```
+
+每个入口通过 `*INCLUDE` 引用同目录的 `geometry_{对称形式}.k`。同一对称形式的
+SPH/NO-SPH 模型共用一份几何，网格、节点和 segment set 不会复制到入口文件中。
+
+```powershell
+python tools/generate_paper_elliptic_blast.py
+```
+
+材料值来自论文表 3–5，并转换为 `mm-g-ms` / MPa。表 3 中
+`σ0=1650 GPa` 与 30CrMnSi2A 的物理量级不符，模型采用 `1650 MPa`。
+炸药的 A/B 为表中 4.157/−0.4587 GPa 转为 4157/−458.7 MPa；论文未给出的
+`E0` 保持原模型值。起爆位置统一为炸药大端面中心 `(0, 0, 0)`。
+
+`KeywordFile.load_resolved()` 会递归解析 `*INCLUDE`，并检测循环引用；
+`split_geometry_include()` 可流式拆分大型 deck，避免构造逐单元 Python 对象。
+
 ## d3plot SPH 破片分析
 
 ```powershell

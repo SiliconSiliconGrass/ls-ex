@@ -19,7 +19,12 @@
 
 from .KCard import KCard, format_float, format_int, format_str, typed_card
 from .KWord import KWord
-from .KeywordFile import KeywordFile, parse_numbers
+from .KeywordFile import (
+    GEOMETRY_KEYWORDS,
+    KeywordFile,
+    parse_numbers,
+    split_geometry_include,
+)
 from .KeywordGenerator import (
     Mesh,
     as_vec3,
@@ -73,6 +78,7 @@ __all__ = [
     "KCard",
     "KWord",
     "KeywordFile",
+    "GEOMETRY_KEYWORDS",
     "Mesh",
     "AngularSpeedHistogram",
     "AngularStatistics",
@@ -113,6 +119,7 @@ __all__ = [
     "plot_angular_distribution",
     "plot_sph_speed_3d",
     "plot_sph_speed_animation",
+    "split_geometry_include",
     "surface_is_watertight",
     "typed_card",
     "voxelize_surface",

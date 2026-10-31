@@ -223,13 +223,17 @@ def build_deck(major_semi: float = 43.2, minor_semi: float = 36.0,
     deck.add(_word("MAT_HIGH_EXPLOSIVE_BURN_TITLE", [
         _card("mat-tnt", widths=[80], kinds=["s"]),
         _header(["mid", "ro", "d", "pcj", "beta", "k", "g", "sigy"]),
-        _card(2, 0.00163, 6930.0, 21000.0, 0.0, 0.0, 0.0, 0.0,
+        # Paper table 4 uses mm-g-ms consistently at runtime:
+        # 6487 m/s equals 6487 mm/ms (1 m/s = 1 mm/ms), and GPa maps to MPa.
+        _card(2, 0.001823, 6487.0, 25420.0, 0.0, 0.0, 0.0, 0.0,
               kinds=["i"] + ["f"] * 7),
     ]))
     deck.add(_word("MAT_PLASTIC_KINEMATIC_TITLE", [
         _card("mat-shell", widths=[80], kinds=["s"]),
         _header(["mid", "ro", "e", "pr", "sigy", "etan", "beta"]),
-        _card(3, 0.00783, 210000.0, 0.33, 1650.0, 300.0, 0.0,
+        # 30CrMnSi2A, paper table 3. The printed sigma0 header says GPa,
+        # but 1650 MPa is the physically consistent yield stress for this steel.
+        _card(3, 0.00783, 201000.0, 0.33, 1650.0, 300.0, 0.0,
               kinds=["i"] + ["f"] * 6),
         _header(["src", "srp", "fs", "vp"]),
         _card(0.0, 0.0, 0.2, 0.0, kinds=["f"] * 4),
@@ -244,7 +248,9 @@ def build_deck(major_semi: float = 43.2, minor_semi: float = 36.0,
     deck.add(_word("EOS_JWL_TITLE", [
         _card("eos-tnt", widths=[80], kinds=["s"]),
         _header(["eosid", "a", "b", "r1", "r2", "omeg", "e0", "vo"]),
-        _card(2, 371200.0, 3231.0, 4.15, 0.95, 0.3, 7000.0, 1.0,
+        # Paper table 4: A/B in GPa converted to MPa. R1/R2/omega are
+        # dimensionless; e0/V0 retain the previous model values.
+        _card(2, 4157.0, -458.7, 3.42, 1.91, 0.32, 7000.0, 1.0,
               kinds=["i"] + ["f"] * 7),
     ]))
 
@@ -295,7 +301,8 @@ def build_deck(major_semi: float = 43.2, minor_semi: float = 36.0,
 
     deck.add(_word("INITIAL_DETONATION", [
         _header(["ipid", "x", "y", "z", "tl", "-", "mmgset"]),
-        _card(0, 0.0, 0.0, 10.0, 0.0, "", 1,
+        # Large-end face center of the explosive cavity (z=0).
+        _card(2, 0.0, 0.0, 0.0, 0.0, "", 1,
               kinds=["i", "f", "f", "f", "f", "s", "i"]),
     ]))
 
