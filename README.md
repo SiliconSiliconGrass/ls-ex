@@ -295,6 +295,23 @@ test1.k                 原始示例文件（测试用的输入，保留在 git 
 测试会检查：单元体积之和等于「外箱体 − 空腔」、每个六面体体积为正（否则 LS-DYNA 会报
 negative volume）、网格表面封闭无裂缝、壳单元法向朝外，以及读写往返不丢数据。
 
+### 六面体网格质量 API
+
+`assess_hex_mesh_quality` 可检查任意 `Mesh` 的八节点六面体，或通过 `pid` 只检查一个 part：
+
+```python
+from ls_ex import assess_hex_mesh_quality
+
+report = assess_hex_mesh_quality(mesh, pid=2, target_size=2.0)
+print(report.summary())
+```
+
+报告包含负体积/零体积计数、角点 scaled Jacobian、角点偏斜代理指标、边长与纵横比，
+以及按 `V^(1/3)` 统计的单元特征尺寸。默认还会计算共享面相邻单元的尺寸跳变。
+`MeshQualityThresholds` 可覆盖默认筛查阈值；大规模规则网格不需要相邻面统计时，可传
+`include_adjacent_size=False`。偏斜指标是本项目的几何代理口径，不等同于任何预处理器
+特定的非线性 skewness 定义。
+
 ## 改造已有的 deck（tools/）
 
 把自己的 `.k`（例如 `shell-explosion-no-sph` 那种圆筒壳 + S-ALE 装药的 deck）改造成
