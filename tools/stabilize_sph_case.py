@@ -103,7 +103,7 @@ def plastic_kinematic(failure_strain: float) -> KWord:
         "MAT_PLASTIC_KINEMATIC_TITLE",
         card("mat-shell", kinds=["s"]),
         header("mid", "ro", "e", "pr", "sigy", "etan", "beta"),
-        card(3, 0.00783, 210000.0, 0.33, 1650.0, 300.0, 0.0,
+        card(3, 0.00783, 201000.0, 0.33, 1650.0, 300.0, 0.0,
              kinds=["i"] + ["f"] * 6),
         header("src", "srp", "fs", "vp"),
         card(0.0, 0.0, failure_strain, 0.0, kinds=["f"] * 4),

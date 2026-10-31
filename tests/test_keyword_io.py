@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from ls_ex import KeywordFile, hex_volume, parse_numbers
+from ls_ex import KeywordFile, hex_volume, parse_numbers, split_geometry_include
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST1 = ROOT / "test1.k"
@@ -53,6 +53,71 @@ class KeywordFileTest(unittest.TestCase):
         self.assertEqual(parse_numbers("  1.0-2.0   3.5"), [1.0, -2.0, 3.5])
         self.assertEqual(parse_numbers("  2.0D-03 4.0"), [2e-3, 4.0])
         self.assertEqual(parse_numbers("      1       1       1"), [1.0, 1.0, 1.0])
+
+    def test_split_geometry_and_resolve_include(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            entry, geometry = self.deck.split_geometry("mesh.k")
+            self.assertNotIn("NODE", list(entry.iter_keyword_names()))
+            self.assertNotIn("ELEMENT_SOLID", list(entry.iter_keyword_names()))
+            self.assertIn("INCLUDE", list(entry.iter_keyword_names()))
+            geometry.write(root / "mesh.k")
+            entry.write(root / "entry.k")
+
+            resolved = KeywordFile.load_resolved(root / "entry.k")
+            self.assertEqual(len(resolved.nodes()), len(self.deck.nodes()))
+            self.assertEqual(
+                len(resolved.solid_elements()),
+                len(self.deck.solid_elements()),
+            )
+
+    def test_nested_include_and_cycle_detection(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "leaf.k").write_text("*NODE\n       1     0.0     0.0     0.0\n*END\n")
+            middle = KeywordFile()
+            middle.add_include("leaf.k")
+            middle.add(type(middle).loads("*END").keywords[0])
+            middle.write(root / "middle.k")
+            top = KeywordFile()
+            top.add_include("middle.k")
+            top.add(type(top).loads("*END").keywords[0])
+            top.write(root / "top.k")
+            self.assertEqual(KeywordFile.load_resolved(root / "top.k").nodes(),
+                             {1: (0.0, 0.0, 0.0)})
+
+            first = KeywordFile()
+            first.add_include("second.k")
+            first.add(type(first).loads("*END").keywords[0])
+            first.write(root / "first.k")
+            second = KeywordFile()
+            second.add_include("first.k")
+            second.add(type(second).loads("*END").keywords[0])
+            second.write(root / "second.k")
+            with self.assertRaises(ValueError):
+                KeywordFile.load_resolved(root / "first.k")
+
+    def test_streaming_geometry_split(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.k"
+            source.write_text(self.text, encoding="utf-8")
+            entry_path, geometry_path = split_geometry_include(
+                source, root / "geometry.k", root / "entry.k"
+            )
+            entry = KeywordFile.load(entry_path)
+            geometry = KeywordFile.load(geometry_path)
+            self.assertIn("INCLUDE", list(entry.iter_keyword_names()))
+            self.assertIn("NODE", list(geometry.iter_keyword_names()))
+            self.assertNotIn("NODE", list(entry.iter_keyword_names()))
+            resolved = KeywordFile.load_resolved(entry_path)
+            self.assertEqual(len(resolved.nodes()), len(self.deck.nodes()))
 
 
 if __name__ == "__main__":

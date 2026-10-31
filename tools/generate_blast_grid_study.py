@@ -36,7 +36,7 @@ def sph_words(symmetry: str) -> list[KWord]:
             "MAT_PLASTIC_KINEMATIC_TITLE",
             card("mat-sph", kinds=["s"]),
             header("mid", "ro", "e", "pr", "sigy", "etan", "beta"),
-            card(4, 0.00783, 210000.0, 0.33, 1650.0, 300.0, 0.0,
+            card(4, 0.00783, 201000.0, 0.33, 1650.0, 300.0, 0.0,
                  kinds=["i"] + ["f"] * 6),
             header("src", "srp", "fs", "vp"),
             card(0.0, 0.0, 0.0, 0.0, kinds=["f"] * 4),
