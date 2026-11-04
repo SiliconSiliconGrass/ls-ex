@@ -78,6 +78,7 @@ class FrameData:
 class SimulationResult:
     case_name: str
     kind: str
+    mirror_symmetry: bool
     d3plot: Path
     output_dir: Path
     all_times_ms: np.ndarray
@@ -430,6 +431,7 @@ def connected_element_fragments(
 def analyze_case(
     case_name: str,
     kind: str,
+    mirror_symmetry: bool,
     d3plot: Path,
     output_dir: Path,
     target_times_us: Sequence[float],
@@ -450,6 +452,7 @@ def analyze_case(
     return SimulationResult(
         case_name=case_name,
         kind=kind,
+        mirror_symmetry=mirror_symmetry,
         d3plot=d3plot,
         output_dir=output_dir,
         all_times_ms=all_times,
@@ -505,13 +508,28 @@ def plot_field(
         time_us = frame.time_ms * 1000.0
         if positions.size:
             if projection == "radial":
-                x_values = np.concatenate(
-                    (positions[:, 0], -positions[:, 0], positions[:, 0], -positions[:, 0])
-                )
-                y_values = np.concatenate(
-                    (positions[:, 1], positions[:, 1], -positions[:, 1], -positions[:, 1])
-                )
-                color_values = np.tile(speeds, 4)
+                if result.mirror_symmetry:
+                    x_values = np.concatenate(
+                        (
+                            positions[:, 0],
+                            -positions[:, 0],
+                            positions[:, 0],
+                            -positions[:, 0],
+                        )
+                    )
+                    y_values = np.concatenate(
+                        (
+                            positions[:, 1],
+                            positions[:, 1],
+                            -positions[:, 1],
+                            -positions[:, 1],
+                        )
+                    )
+                    color_values = np.tile(speeds, 4)
+                else:
+                    x_values = positions[:, 0]
+                    y_values = positions[:, 1]
+                    color_values = speeds
                 scatter = axis.scatter(
                     x_values,
                     y_values,
@@ -565,23 +583,19 @@ def plot_field(
                 limits["zmax"] if projection == "axial" else limits["r"],
             )
             axis.set_aspect("equal", adjustable="box")
-        axis.set_title(
-            f"t = {time_us:.1f} μs | 有效 {frame.valid_count:,} / "
-            f"活动 {frame.active_count:,}"
+        axis.text(
+            0.03,
+            0.97,
+            f"t = {time_us:.1f} μs",
+            transform=axis.transAxes,
+            ha="left",
+            va="top",
+            fontsize=9,
+            color="0.2",
         )
         axis.grid(color="0.9", linewidth=0.5)
         axis.tick_params(labelsize=8)
 
-    subtitle = (
-        "径向投影：沿轴向观察，1/4 模型按双平面对称展开"
-        if projection == "radial"
-        else "轴向投影：r = sqrt(x²+y²)，按双平面对称展开"
-    )
-    entity = "SPH 粒子" if result.kind == "sph" else "存活壳体单元质心"
-    fig.suptitle(
-        f"{result.case_name} 破片速度场（{entity}）\n{subtitle}",
-        fontsize=14,
-    )
     if scatter is not None:
         colorbar = fig.colorbar(
             scatter,
@@ -619,7 +633,6 @@ def plot_speed_and_count(
     axes[0, 0].set_xlim(0.0, DISPLAY_SPEED_MAX)
     axes[0, 0].set_xlabel(r"总速度 $|v|$ / (m s$^{-1}$)")
     axes[0, 0].set_ylabel("粒子/单元占比 / %")
-    axes[0, 0].set_title("不同时刻速度分布")
     axes[0, 0].legend(ncol=3, frameon=False)
 
     axes[0, 1].plot(
@@ -666,7 +679,6 @@ def plot_speed_and_count(
         legend_labels.append("节点连通破片簇")
     axes[0, 1].set_xlabel("t / μs")
     axes[0, 1].set_ylabel("数量")
-    axes[0, 1].set_title("破片/有效采样数量随时间变化")
     axes[0, 1].legend(legend_handles, legend_labels, frameon=False, loc="upper left")
 
     for statistic, color in (("median", "#1f77b4"), ("p95", "#d1495b")):
@@ -687,7 +699,6 @@ def plot_speed_and_count(
         )
     axes[1, 0].set_xlabel("t / μs")
     axes[1, 0].set_ylabel(r"速度 / (m s$^{-1}$)")
-    axes[1, 0].set_title("速度统计量随时间变化")
     axes[1, 0].legend(frameon=False)
 
     final = result.frames[-1]
@@ -704,14 +715,6 @@ def plot_speed_and_count(
     axes[1, 1].set_xlim(0.0, DISPLAY_SPEED_MAX)
     axes[1, 1].set_xlabel(r"总速度 $|v|$ / (m s$^{-1}$)")
     axes[1, 1].set_ylabel("数量")
-    axes[1, 1].set_title(
-        f"末帧速度直方图（t = {final.time_ms * 1000:.1f} μs）"
-    )
-
-    fig.suptitle(
-        f"{result.case_name} 速度与数量分布\n"
-        f"直方图仅显示 0–{DISPLAY_SPEED_MAX:g} m/s；CSV 保留全部有效值"
-    )
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
@@ -726,30 +729,45 @@ def plot_azimuth_distribution(
     frame = usable_frames[-1]
     azimuth = frame.azimuth0_deg[frame.valid]
     speeds = frame.speeds[frame.valid]
-    edges = np.arange(0.0, 90.0 + AZIMUTH_BIN_SIZE, AZIMUTH_BIN_SIZE)
-    indices = np.clip(
-        np.digitize(azimuth, edges, right=False) - 1,
-        0,
-        len(edges) - 2,
-    )
-    counts = np.bincount(indices, minlength=len(edges) - 1)
-    mean_speed = np.full(len(counts), np.nan)
-    median_speed = np.full(len(counts), np.nan)
-    for index in range(len(counts)):
-        values = speeds[indices == index]
-        if values.size:
-            mean_speed[index] = np.mean(values)
-            median_speed[index] = np.median(values)
-
-    full_counts = np.concatenate((counts, counts[::-1], counts, counts[::-1]))
-    full_mean_speed = np.concatenate(
-        (mean_speed, mean_speed[::-1], mean_speed, mean_speed[::-1])
-    )
-    full_median_speed = np.concatenate(
-        (median_speed, median_speed[::-1], median_speed, median_speed[::-1])
-    )
     full_edges = np.arange(0.0, 360.0 + AZIMUTH_BIN_SIZE, AZIMUTH_BIN_SIZE)
     centers = (full_edges[:-1] + full_edges[1:]) / 2.0
+    if result.mirror_symmetry:
+        edges = np.arange(0.0, 90.0 + AZIMUTH_BIN_SIZE, AZIMUTH_BIN_SIZE)
+        indices = np.clip(
+            np.digitize(azimuth, edges, right=False) - 1,
+            0,
+            len(edges) - 2,
+        )
+        counts = np.bincount(indices, minlength=len(edges) - 1)
+        mean_speed = np.full(len(counts), np.nan)
+        median_speed = np.full(len(counts), np.nan)
+        for index in range(len(counts)):
+            values = speeds[indices == index]
+            if values.size:
+                mean_speed[index] = np.mean(values)
+                median_speed[index] = np.median(values)
+        full_counts = np.concatenate((counts, counts[::-1], counts, counts[::-1]))
+        full_mean_speed = np.concatenate(
+            (mean_speed, mean_speed[::-1], mean_speed, mean_speed[::-1])
+        )
+        full_median_speed = np.concatenate(
+            (median_speed, median_speed[::-1], median_speed, median_speed[::-1])
+        )
+    else:
+        azimuth_full = np.mod(azimuth, 360.0)
+        indices = np.clip(
+            np.digitize(azimuth_full, full_edges, right=False) - 1,
+            0,
+            len(full_edges) - 2,
+        )
+        full_counts = np.bincount(indices, minlength=len(full_edges) - 1)
+        full_mean_speed = np.full(len(full_counts), np.nan)
+        full_median_speed = np.full(len(full_counts), np.nan)
+        for index in range(len(full_counts)):
+            values = speeds[indices == index]
+            if values.size:
+                full_mean_speed[index] = np.mean(values)
+                full_median_speed[index] = np.median(values)
 
     fig, axes = plt.subplots(
         2,
@@ -765,9 +783,8 @@ def plot_azimuth_distribution(
         color="#4c78a8",
         edgecolor="white",
     )
-    axes[0].set_ylabel("数量 / 全周等效")
-    axes[0].set_title(
-        f"{result.case_name} 径向方位角分布（t = {frame.time_ms * 1000:.1f} μs）"
+    axes[0].set_ylabel(
+        "数量 / 全周等效" if result.mirror_symmetry else "数量"
     )
     axes[1].plot(centers, full_mean_speed, "o-", label="平均值", color="#d1495b")
     axes[1].plot(
@@ -802,22 +819,32 @@ def plot_azimuth_distribution(
 
 def azimuth_profile_rows(
     frame: FrameData,
+    *,
+    mirror_symmetry: bool,
 ) -> list[dict[str, float | int | str]]:
     valid = frame.valid
     azimuth = frame.azimuth0_deg[valid]
     speeds = frame.speeds[valid]
-    edges = np.arange(0.0, 90.0 + AZIMUTH_BIN_SIZE, AZIMUTH_BIN_SIZE)
+    if mirror_symmetry:
+        edges = np.arange(0.0, 90.0 + AZIMUTH_BIN_SIZE, AZIMUTH_BIN_SIZE)
+    else:
+        azimuth = np.mod(azimuth, 360.0)
+        edges = np.arange(0.0, 360.0 + AZIMUTH_BIN_SIZE, AZIMUTH_BIN_SIZE)
     rows: list[dict[str, float | int | str]] = []
     for index in range(len(edges) - 1):
         values = speeds[(azimuth >= edges[index]) & (azimuth < edges[index + 1])]
+        count_field = "count_quarter" if mirror_symmetry else "count_full"
+        fraction_field = (
+            "fraction_quarter" if mirror_symmetry else "fraction_full"
+        )
         rows.append(
             {
                 "time_ms": frame.time_ms,
                 "angle_start_deg": edges[index],
                 "angle_end_deg": edges[index + 1],
                 "angle_center_deg": (edges[index] + edges[index + 1]) / 2.0,
-                "count_quarter": int(values.size),
-                "fraction_quarter": (
+                count_field: int(values.size),
+                fraction_field: (
                     float(values.size / np.count_nonzero(valid)) if np.any(valid) else 0.0
                 ),
                 "speed_mean_mps": float(np.mean(values)) if values.size else np.nan,
@@ -838,6 +865,7 @@ def axial_profile_data(
     valid = frame.valid
     z0 = frame.initial_positions[valid, 2]
     azimuth = frame.azimuth0_deg[valid]
+    azimuth = np.minimum(np.mod(azimuth, 180.0), 180.0 - np.mod(azimuth, 180.0))
     speeds = frame.speeds[valid]
     zmin = max(-10.0, np.floor(float(np.min(z0)) / 10.0) * 10.0)
     zmax = min(120.0, np.ceil(float(np.max(z0)) / 10.0) * 10.0)
@@ -899,13 +927,9 @@ def plot_axial_profile(
         axes, colors, curves.items(), strict=True
     ):
         axis.plot(centers, medians, "o-", color=color, markersize=4, linewidth=1.5)
-        axis.set_title(label)
         axis.set_xlabel(r"初始轴向位置 $z_0$ / mm")
         axis.grid(color="0.9", linewidth=0.6)
     axes[0].set_ylabel(r"破片速度中位数 / (m s$^{-1}$)")
-    fig.suptitle(
-        f"{result.case_name} 轴向速度分布（t = {frame.time_ms * 1000:.1f} μs）"
-    )
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
     return rows
@@ -1234,7 +1258,10 @@ def write_case_outputs(
         (
             row
             for frame in result.frames
-            for row in azimuth_profile_rows(frame)
+            for row in azimuth_profile_rows(
+                frame,
+                mirror_symmetry=result.mirror_symmetry,
+            )
         ),
         out / "radial_azimuth_statistics.csv",
     )
@@ -1273,6 +1300,8 @@ def write_case_outputs(
     )
     warnings.append(
         "1/4 模型图像按 x=0、y=0 两个对称面扩展显示；统计 CSV 保留原始 1/4 数据。"
+        if result.mirror_symmetry
+        else "全模型图像和统计均按原始完整模型显示，不做对称扩展。"
     )
     warnings.append(
         "图中的“数量”是离散场采样实体数（SPH 粒子或存活单元），"
@@ -1290,6 +1319,9 @@ def write_case_outputs(
         "selected_times_us": [frame.time_ms * 1000.0 for frame in result.frames],
         "speed_validity_max_mps": result.speed_max,
         "speed_display_max_mps": DISPLAY_SPEED_MAX,
+        "display_symmetry": (
+            "quarter_expanded" if result.mirror_symmetry else "full_model"
+        ),
         "sph_deletion_nonzero_count": result.sph_deletion_nonzero_count,
         "frames": [
             {
@@ -1389,12 +1421,15 @@ def write_case_readme(result: SimulationResult, summary: dict[str, object]) -> N
 
 {chr(10).join(f"- {warning}" for warning in summary["warnings"])}
 """
-    (out / "README.md").write_text(text, encoding="utf-8")
+    readme_path = out / "README.md"
+    if not readme_path.exists():
+        readme_path.write_text(text, encoding="utf-8")
 
 
 def write_comparison(
     summaries: Sequence[dict[str, object]],
     output_root: Path,
+    filename: str,
 ) -> None:
     fields = [
         "case",
@@ -1409,7 +1444,7 @@ def write_comparison(
         "speed_p95_mps",
         "speed_max_mps",
     ]
-    with (output_root / "comparison_summary.csv").open(
+    with (output_root / filename).open(
         "w", newline="", encoding="utf-8"
     ) as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
@@ -1481,18 +1516,20 @@ def write_comparison(
             "",
         ]
     )
-    (output_root / "README.md").write_text("\n".join(lines), encoding="utf-8")
+    readme_path = output_root / "README.md"
+    if not readme_path.exists():
+        readme_path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Post-process the no-SPH and SPH quarter warhead simulations."
+        description="Post-process the quarter and full warhead simulations."
     )
     parser.add_argument(
         "--input-root",
         type=Path,
         default=DEFAULT_ROOT,
-        help="directory containing no-sph-quarter and sph-quarter",
+        help="directory containing no-sph-quarter, sph-quarter and no-sph-full",
     )
     parser.add_argument(
         "--output-root",
@@ -1501,7 +1538,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--case",
-        choices=("no-sph", "sph", "both"),
+        choices=("no-sph", "sph", "no-sph-full", "both"),
         default="both",
     )
     parser.add_argument(
@@ -1530,18 +1567,46 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_matplotlib()
     args.output_root.mkdir(parents=True, exist_ok=True)
 
-    cases = ("no-sph", "sph") if args.case == "both" else (args.case,)
+    layouts = {
+        "no-sph": (
+            "no-sph-quarter",
+            "no-sph",
+            "无 SPH（1/4 模型）",
+            True,
+            "no-sph",
+        ),
+        "sph": (
+            "sph-quarter",
+            "sph",
+            "SPH（1/4 模型）",
+            True,
+            "sph",
+        ),
+        "no-sph-full": (
+            "no-sph-full",
+            "no-sph",
+            "无 SPH（全模型）",
+            False,
+            "no-sph-full",
+        ),
+    }
+    cases = (
+        ("no-sph", "sph") if args.case == "both" else (args.case,)
+    )
     summaries: list[dict[str, object]] = []
-    for kind in cases:
-        case_name = "无 SPH（单元失效删除）" if kind == "no-sph" else "SPH（自适应粒子）"
-        d3plot = args.input_root / f"{kind}-quarter" / "d3plot"
+    for case_key in cases:
+        folder, model_kind, case_name, mirror_symmetry, output_key = layouts[
+            case_key
+        ]
+        d3plot = args.input_root / folder / "d3plot"
         if not d3plot.is_file():
             raise FileNotFoundError(f"d3plot not found: {d3plot}")
-        output_dir = args.output_root / kind
+        output_dir = args.output_root / output_key
         print(f"Reading {case_name}: {d3plot}")
         result = analyze_case(
             case_name=case_name,
-            kind=kind,
+            kind=model_kind,
+            mirror_symmetry=mirror_symmetry,
             d3plot=d3plot,
             output_dir=output_dir,
             target_times_us=target_times,
@@ -1551,8 +1616,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         summaries.append(summary)
         print(f"Wrote {output_dir}")
 
-    write_comparison(summaries, args.output_root)
-    print(f"Comparison: {args.output_root / 'comparison_summary.csv'}")
+    comparison_name = (
+        "comparison_summary.csv"
+        if args.case == "both"
+        else f"comparison_summary_{args.case}.csv"
+    )
+    write_comparison(summaries, args.output_root, comparison_name)
+    print(f"Comparison: {args.output_root / comparison_name}")
     return 0
 
 
