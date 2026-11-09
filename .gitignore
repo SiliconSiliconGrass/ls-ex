@@ -33,3 +33,6 @@ part_des
 
 # LS-PrePost scratch / session files
 lspost.*
+
+# Generated analysis artifacts: keep on disk, never commit
+outputs/
